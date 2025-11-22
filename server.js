@@ -62,7 +62,7 @@ ${rawText}
 `.trim();
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-5.0-mini",
       messages: [
         { role: "system", content: "あなたは日本語の医療文書の校正者です。" },
         { role: "user", content: prompt },
@@ -137,7 +137,7 @@ ${urgencyMd}
 `.trim();
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-5.0-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,
@@ -150,6 +150,60 @@ ${urgencyMd}
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "chat エラー" });
+  }
+});
+// ========== 3) OCR（画像 → テキスト抽出） ==========
+app.post("/api/ocr", async (req, res) => {
+  try {
+    const { imageBase64 } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: "imageBase64 がありません。" });
+    }
+
+    // Vision OCR プロンプト
+    const visionPrompt = `
+あなたは医療文書を読み取るOCRシステムです。
+画像には以下が含まれる可能性があります：
+
+- 検診結果（健康診断結果、血液検査）
+- お薬手帳（薬剤名、処方量、処方日）
+- 検査の時系列データ
+- 血圧手帳、血糖記録
+- 病院のレシート型検査結果
+
+■タスク
+- 画像から読み取れる文字を忠実に抽出する
+- 表形式の検査値は、「項目: 値」の形で列挙
+- 誤認識が疑われる場合でも勝手に補完しない
+- 説明をつけず、抽出テキストのみ返す
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1",
+      messages: [
+        { role: "user",
+          content: [
+            { type: "text", text: visionPrompt },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 4000,
+      temperature: 0.0,
+    });
+
+    const ocrText = completion.choices[0].message.content.trim();
+
+    const cleaned = await cleanTextWithLLM(ocrText); 
+res.json({ ocrText: cleaned });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "OCR エラー" });
   }
 });
 

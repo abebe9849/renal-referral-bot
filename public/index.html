@@ -171,6 +171,36 @@
       <button id="sendButton" class="button" type="submit">送信</button>
     </form>
   </div>
+  <div>
+    <h3>写真から読み取り（OCR）</h3>
+    <input id="ocrInput" type="file" accept="image/*">
+    <button onclick="sendOCR()">写真を読み取る</button>
+    <pre id="ocrResult"></pre>
+  </div>
+
+  <script>
+  async function sendOCR() {
+    const file = document.getElementById("ocrInput").files[0];
+    if (!file) return alert("画像を選択してください");
+
+    // Base64へ変換
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+
+      const res = await fetch("/api/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64 })
+      });
+
+      const data = await res.json();
+      document.getElementById("ocrResult").innerText = data.ocrText;
+    };
+    reader.readAsDataURL(file);
+  }
+  </script>
+
 
   <script src="app.js"></script>
 </body>
