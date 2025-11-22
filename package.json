@@ -1,0 +1,15 @@
+{
+  "name": "renal-referral-bot",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "openai": "^4.0.0",
+    "dotenv": "^16.4.0"
+  }
+}
+

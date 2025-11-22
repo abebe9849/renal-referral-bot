@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>腎臓内科 紹介状作成チャットボット</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      background: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .app {
+      background: #ffffff;
+      width: 100%;
+      max-width: 520px;
+      height: 92vh;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .app-header {
+      padding: 12px 16px;
+      background: #0f766e;
+      color: white;
+    }
+    .app-header-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .app-header-subtitle {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      margin-top: 6px;
+    }
+    .chat {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      background: #f9fafb;
+    }
+    .message-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    .message-row.bot {
+      justify-content: flex-start;
+    }
+    .message-row.user {
+      justify-content: flex-end;
+    }
+    .message-bubble {
+      max-width: 80%;
+      padding: 8px 12px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .message-row.bot .message-bubble {
+      background: #e5f6ff;
+      border-bottom-left-radius: 2px;
+    }
+    .message-row.user .message-bubble {
+      background: #0f766e;
+      color: white;
+      border-bottom-right-radius: 2px;
+    }
+    .app-footer {
+      padding: 8px;
+      border-top: 1px solid #e5e7eb;
+      background: #ffffff;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .input {
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      padding: 8px 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    .input:focus {
+      border-color: #0f766e;
+      box-shadow: 0 0 0 1px rgba(15,118,110,0.3);
+    }
+    .button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #0f766e;
+      color: white;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .button.secondary {
+      background: #6b7280;
+    }
+    .button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .status {
+      font-size: 11px;
+      color: #6b7280;
+      padding: 0 12px 6px;
+    }
+    .toolbar {
+      padding: 4px 10px;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      border-top: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="app-header-title">腎臓内科 紹介状作成チャット</div>
+      <div class="app-header-subtitle">
+        地域のクリニックの先生が、腎機能低下症例の紹介可否・緊急度を判断し、紹介状案を自動生成するためのツールです。
+      </div>
+      <div class="tag">音声入力対応 / 試験運用中</div>
+    </header>
+
+    <div id="chat" class="chat"></div>
+    <div id="status" class="status"></div>
+
+    <div class="toolbar">
+      <button id="copyButton" class="button secondary" type="button" disabled>紹介状をコピー</button>
+      <button id="emailButton" class="button secondary" type="button" disabled>紹介状をメール送信</button>
+    </div>
+
+    <form id="form" class="app-footer">
+      <input
+        id="input"
+        class="input"
+        type="text"
+        autocomplete="off"
+        placeholder="テキスト入力 or 🎙ボタンで音声入力"
+      />
+      <button id="micButton" class="button" type="button">🎙</button>
+      <button id="sendButton" class="button" type="submit">送信</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
