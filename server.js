@@ -20,7 +20,15 @@ const markdownDir = path.join(__dirname, "markdown");
 const infoMd = fs.readFileSync(path.join(markdownDir, "紹介状に必要な情報.md"), "utf8");
 const criteriaMd = fs.readFileSync(path.join(markdownDir, "紹介基準.md"), "utf8");
 const urgencyMd = fs.readFileSync(path.join(markdownDir, "紹介の緊急度.md"), "utf8");
-
+let medicalDictMd = "";
+try {
+  medicalDictMd = fs.readFileSync(
+    path.join(markdownDir, "医療用頻出単語_腎臓内科.md"),
+    "utf8"
+  );
+} catch (e) {
+  console.error("医療用頻出単語_腎臓内科.md が読めません:", e.message);
+}
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
@@ -34,13 +42,23 @@ app.post("/api/clean-text", async (req, res) => {
     }
 
     const prompt = `
-以下は日本語の医療情報（病歴・検査値など）です。音声認識由来の誤変換を可能な範囲で修正し、
-意味が変わらないように自然な日本語の文章に整形してください。
+あなたは日本語の医療文書専門の校正AIです。
+以下は音声認識から得られたテキストであり、医療用語や薬剤名、検査値の単位などが誤変換されている可能性があります。
 
-【入力】
+【医療用頻出単語の辞書】
+${medicalDictMd}
+
+■タスク
+- 上記の医療用語辞書を優先的に参照しながら、誤変換された医療用語や薬剤名を適切な表記に修正してください。
+- 検査値の数字や単位（mg/dL, mmol/L, g/gCr など）が明らかにおかしい場合は文脈から自然な形に整えてください。
+- ただし「推測して創作する」のではなく、元の意味を変えない範囲での修正にとどめてください。
+- 文の意味が変わらないようにしつつ、日本語として読みやすい医療文にしてください。
+- 出力は【修正後テキスト】のみを返し、説明やコメントは一切書かないでください。
+
+【入力テキスト】
 ${rawText}
 
-【出力（修正後のテキストのみを返してください）】
+【修正後テキスト】
 `.trim();
 
     const completion = await openai.chat.completions.create({
@@ -59,6 +77,7 @@ ${rawText}
     res.status(500).json({ error: "clean-text エラー" });
   }
 });
+
 
 // ========== 2) チャット本体 API（LLM＋ガイドライン参照） ==========
 app.post("/api/chat", async (req, res) => {
