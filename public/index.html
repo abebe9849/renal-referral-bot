@@ -3,205 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <title>腎臓内科 紹介状作成チャットボット</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
     body {
-      margin: 0;
-      background: #f3f4f6;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+      font-family: sans-serif;
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
     }
-    .app {
-      background: #ffffff;
-      width: 100%;
-      max-width: 520px;
-      height: 92vh;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .app-header {
-      padding: 12px 16px;
-      background: #0f766e;
-      color: white;
-    }
-    .app-header-title {
-      font-size: 16px;
-      font-weight: 600;
-    }
-    .app-header-subtitle {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-top: 4px;
-    }
-    .tag {
-      display: inline-block;
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.4);
-      margin-top: 6px;
-    }
-    .chat {
-      flex: 1;
-      padding: 10px;
-      overflow-y: auto;
-      background: #f9fafb;
-    }
-    .message-row {
-      display: flex;
-      margin-bottom: 8px;
-    }
-    .message-row.bot {
-      justify-content: flex-start;
-    }
-    .message-row.user {
-      justify-content: flex-end;
-    }
-    .message-bubble {
-      max-width: 80%;
-      padding: 8px 12px;
-      border-radius: 14px;
-      font-size: 14px;
-      line-height: 1.5;
+    #chat {
+      border: 1px solid #aaa;
+      padding: 15px;
+      height: 400px;
+      overflow-y: scroll;
       white-space: pre-wrap;
-      word-wrap: break-word;
+      background: #fafafa;
     }
-    .message-row.bot .message-bubble {
-      background: #e5f6ff;
-      border-bottom-left-radius: 2px;
-    }
-    .message-row.user .message-bubble {
-      background: #0f766e;
-      color: white;
-      border-bottom-right-radius: 2px;
-    }
-    .app-footer {
-      padding: 8px;
-      border-top: 1px solid #e5e7eb;
-      background: #ffffff;
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-    .input {
-      flex: 1;
-      border-radius: 999px;
-      border: 1px solid #d1d5db;
-      padding: 8px 12px;
-      font-size: 14px;
-      outline: none;
-    }
-    .input:focus {
-      border-color: #0f766e;
-      box-shadow: 0 0 0 1px rgba(15,118,110,0.3);
-    }
-    .button {
-      border: none;
-      border-radius: 999px;
-      padding: 8px 12px;
-      font-size: 13px;
-      cursor: pointer;
-      background: #0f766e;
-      color: white;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      white-space: nowrap;
-    }
-    .button.secondary {
-      background: #6b7280;
-    }
-    .button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    .status {
-      font-size: 11px;
-      color: #6b7280;
-      padding: 0 12px 6px;
-    }
-    .toolbar {
-      padding: 4px 10px;
-      display: flex;
-      gap: 6px;
-      justify-content: flex-end;
-      border-top: 1px solid #e5e7eb;
-      background: #f9fafb;
+    .msg-user { color: blue; margin-bottom: 10px; }
+    .msg-bot { color: black; margin-bottom: 10px; }
+    #ocrResult {
+      background: #f5f5f5;
+      padding: 10px;
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <div class="app-header-title">腎臓内科 紹介状作成チャット</div>
-      <div class="app-header-subtitle">
-        地域のクリニックの先生が、腎機能低下症例の紹介可否・緊急度を判断し、紹介状案を自動生成するためのツールです。
-      </div>
-      <div class="tag">音声入力対応 / 試験運用中</div>
-    </header>
 
-    <div id="chat" class="chat"></div>
-    <div id="status" class="status"></div>
+  <h1>腎臓内科 紹介状作成チャットボット</h1>
 
-    <div class="toolbar">
-      <button id="copyButton" class="button secondary" type="button" disabled>紹介状をコピー</button>
-      <button id="emailButton" class="button secondary" type="button" disabled>紹介状をメール送信</button>
-    </div>
+  <!-- チャット表示エリア -->
+  <div id="chat"></div>
 
-    <form id="form" class="app-footer">
-      <input
-        id="input"
-        class="input"
-        type="text"
-        autocomplete="off"
-        placeholder="テキスト入力 or 🎙ボタンで音声入力"
-      />
-      <button id="micButton" class="button" type="button">🎙</button>
-      <button id="sendButton" class="button" type="submit">送信</button>
-    </form>
-  </div>
-  <div>
-    <h3>写真から読み取り（OCR）</h3>
-    <input id="ocrInput" type="file" accept="image/*">
-    <button onclick="sendOCR()">写真を読み取る</button>
-    <pre id="ocrResult"></pre>
-  </div>
+  <br>
 
-  <script>
-  async function sendOCR() {
-    const file = document.getElementById("ocrInput").files[0];
-    if (!file) return alert("画像を選択してください");
+  <!-- ユーザー入力 -->
+  <textarea id="userInput" rows="3" style="width:100%;"></textarea>
+  <button onclick="sendMessage()">送信</button>
 
-    // Base64へ変換
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result.split(',')[1];
+  <hr>
 
-      const res = await fetch("/api/ocr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64 })
-      });
+  <!-- 音声入力ボタン（ブラウザ音声認識） -->
+  <button onclick="startVoice()">🎤 音声入力開始</button>
+  <span id="voiceStatus"></span>
 
-      const data = await res.json();
-      document.getElementById("ocrResult").innerText = data.ocrText;
-    };
-    reader.readAsDataURL(file);
+  <hr>
+
+  <!-- OCR（画像 → テキスト） -->
+  <h3>📸 写真から読み取り（OCR）</h3>
+  <input id="ocrInput" type="file" accept="image/*">
+  <button onclick="sendOCR()">写真を読み取る</button>
+
+  <h4>OCR 結果</h4>
+  <pre id="ocrResult"></pre>
+
+<script>
+// ------------------------------------
+// チャットメッセージ送信
+// ------------------------------------
+async function sendMessage() {
+  const userText = document.getElementById("userInput").value.trim();
+  if (!userText) return;
+
+  addMessage("あなた", userText, "msg-user");
+
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: userText }]
+    })
+  });
+
+  const data = await res.json();
+  addMessage("Bot", data.reply, "msg-bot");
+
+  document.getElementById("userInput").value = "";
+}
+
+// チャットに表示
+function addMessage(sender, text, css) {
+  const chat = document.getElementById("chat");
+  const div = document.createElement("div");
+  div.className = css;
+  div.textContent = sender + "：\n" + text + "\n";
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ------------------------------------
+// 音声認識（ブラウザ組み込み）
+// ------------------------------------
+function startVoice() {
+  const speech = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  speech.lang = "ja-JP";
+
+  document.getElementById("voiceStatus").innerText = "🎤 音声認識中…";
+
+  speech.onresult = async function (e) {
+    const rawText = e.results[0][0].transcript;
+
+    // 認識結果を clean-text API に送る
+    const res = await fetch("/api/clean-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rawText })
+    });
+
+    const data = await res.json();
+    document.getElementById("userInput").value = data.cleanedText;
+    document.getElementById("voiceStatus").innerText = "✔ 音声入力完了";
+  };
+
+  speech.onerror = function () {
+    document.getElementById("voiceStatus").innerText = "❌ 音声入力エラー";
+  };
+
+  speech.start();
+}
+
+// ------------------------------------
+// OCR（写真 → テキスト）
+// ------------------------------------
+async function sendOCR() {
+  const file = document.getElementById("ocrInput").files[0];
+  if (!file) {
+    alert("画像を選択してください");
+    return;
   }
-  </script>
 
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result.split(",")[1];
 
-  <script src="app.js"></script>
+    const res = await fetch("/api/ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: base64 })
+    });
+
+    const data = await res.json();
+
+    // OCR結果表示
+    document.getElementById("ocrResult").innerText = data.ocrText;
+
+    // OCR結果を userInput にコピー（必要に応じて）
+    document.getElementById("userInput").value = data.ocrText;
+  };
+
+  reader.readAsDataURL(file);
+}
+
+</script>
+
 </body>
 </html>

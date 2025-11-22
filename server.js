@@ -200,7 +200,7 @@ app.post("/api/ocr", async (req, res) => {
     const ocrText = completion.choices[0].message.content.trim();
 
     const cleaned = await cleanTextWithLLM(ocrText); 
-res.json({ ocrText: cleaned });
+    res.json({ ocrText: cleaned });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "OCR エラー" });
