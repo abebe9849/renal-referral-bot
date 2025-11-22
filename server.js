@@ -6,7 +6,6 @@ const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const OpenAI = require("openai");
-const nodemailer = require("nodemailer");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -132,47 +131,6 @@ ${urgencyMd}
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "chat エラー" });
-  }
-});
-
-// ========== 3) 紹介状メール送信 API ==========
-app.post("/api/send-email", async (req, res) => {
-  try {
-    console.log("SMTP_USER:", process.env.SMTP_USER);
-    console.log("SMTP_PASS length:", process.env.SMTP_PASS && process.env.SMTP_PASS.length);
-  } catch (err) {
-    console.error(err);
-  }
-  try {
-    const { letterText } = req.body || {};
-    if (!letterText) {
-      return res.status(400).json({ error: "letterText がありません。" });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
-    const to = process.env.EMAIL_TO || "xxx@gmail.com"; // 固定アドレスに送りたい場合はここか .env で設定
-
-    await transporter.sendMail({
-      from,
-      to,
-      subject: "腎臓内科紹介状（自動生成）",
-      text: letterText,
-    });
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "メール送信エラー" });
   }
 });
 
