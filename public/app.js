@@ -6,15 +6,21 @@ const inputEl = document.getElementById("input");
 const statusEl = document.getElementById("status");
 const sendButton = document.getElementById("sendButton");
 const micButton = document.getElementById("micButton");
+const imgButton = document.getElementById("imgButton");
+const imageInput = document.getElementById("imageInput");
 const copyButton = document.getElementById("copyButton");
 const emailButton = document.getElementById("emailButton");
-
-// LLM との会話履歴（サーバーにそのまま渡す）
+const feedbackButton = document.getElementById("feedbackButton");
+// =========================
+// グローバル変数
+// =========================
 let messages = [];
 let isSending = false;
 let lastLetterText = null;
 
-// 音声認識セットアップ
+// =========================
+// 音声認識
+// =========================
 const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
@@ -27,6 +33,9 @@ if (SpeechRecognition) {
   recognition.maxAlternatives = 1;
 }
 
+// =========================
+// チャット表示
+// =========================
 function appendMessage(text, sender = "bot") {
   const row = document.createElement("div");
   row.className = `message-row ${sender}`;
@@ -40,10 +49,35 @@ function appendMessage(text, sender = "bot") {
   chatEl.scrollTop = chatEl.scrollHeight;
 }
 
+// 📷 サムネイルメッセージ
+function appendImageMessage(base64) {
+  const row = document.createElement("div");
+  row.className = "message-row user";
+
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble";
+
+  const img = document.createElement("img");
+  img.src = `data:image/jpeg;base64,${base64}`;
+  img.style.maxWidth = "120px";
+  img.style.borderRadius = "8px";
+  img.style.marginTop = "4px";
+
+  bubble.textContent = "画像を受信しました：\n";
+  bubble.appendChild(img);
+
+  row.appendChild(bubble);
+  chatEl.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
 function setStatus(text) {
   statusEl.textContent = text || "";
 }
 
+// =========================
+// チャット送信
+// =========================
 async function sendChat(userText) {
   if (!userText) return;
   if (isSending) return;
@@ -55,7 +89,6 @@ async function sendChat(userText) {
   micButton.disabled = true;
   setStatus("LLMと通信中です…");
 
-  // 会話履歴にユーザー発言を追加
   messages.push({ role: "user", content: userText });
   appendMessage(userText, "user");
 
@@ -66,29 +99,25 @@ async function sendChat(userText) {
       body: JSON.stringify({ messages }),
     });
     if (!resp.ok) throw new Error("chat API error");
+
     const data = await resp.json();
     const reply = data.reply || "";
 
-    // LLMからの応答を履歴に追加
     messages.push({ role: "assistant", content: reply });
     appendMessage(reply, "bot");
 
-    // 「紹介状:」で始まる場合は紹介状とみなす
     if (reply.startsWith("紹介状:")) {
       lastLetterText = reply.replace(/^紹介状:\s*/, "");
       copyButton.disabled = false;
       emailButton.disabled = false;
-      setStatus("紹介状案が生成されました。コピーまたはメール送信を選択できます。");
+      setStatus("紹介状案が生成されました。コピーまたはメール送信できます。");
     } else {
       setStatus("");
     }
   } catch (err) {
     console.error(err);
-    appendMessage(
-      "申し訳ありません。サーバーまたはLLMとの通信でエラーが発生しました。",
-      "bot"
-    );
-    setStatus("エラーが発生しました。");
+    appendMessage("エラーが発生しました。もう一度お試しください。", "bot");
+    setStatus("通信エラー");
   } finally {
     isSending = false;
     inputEl.disabled = false;
@@ -98,7 +127,9 @@ async function sendChat(userText) {
   }
 }
 
-// 音声認識ハンドラ
+// =========================
+// 音声認識
+// =========================
 function setupSpeechRecognition() {
   if (!recognition) {
     micButton.disabled = true;
@@ -114,7 +145,7 @@ function setupSpeechRecognition() {
       recognition.start();
       isListening = true;
       micButton.textContent = "🛑";
-      setStatus("音声認識中… 話し終わったら数秒待ってください。");
+      setStatus("音声認識中…");
     } catch (e) {
       console.error(e);
     }
@@ -123,27 +154,22 @@ function setupSpeechRecognition() {
   recognition.addEventListener("result", async (event) => {
     const transcript = event.results[0][0].transcript;
     try {
-      // LLM で誤変換修正
       const resp = await fetch("/api/clean-text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawText: transcript }),
       });
-      if (!resp.ok) throw new Error("clean-text error");
       const data = await resp.json();
       const cleaned = data.cleanedText || transcript;
 
-      // 既存入力に追記
-      if (inputEl.value) {
-        inputEl.value = inputEl.value + " " + cleaned;
-      } else {
-        inputEl.value = cleaned;
-      }
-      setStatus("音声入力の文字起こしを反映しました。必要に応じて修正のうえ送信してください。");
+      inputEl.value = inputEl.value
+        ? inputEl.value + " " + cleaned
+        : cleaned;
+
+      setStatus("音声入力を反映しました。");
     } catch (err) {
-      console.error(err);
       inputEl.value = transcript;
-      setStatus("音声認識結果の校正に失敗しました（元の結果をそのまま表示しています）。");
+      setStatus("音声校正に失敗しました。");
     }
   });
 
@@ -151,49 +177,106 @@ function setupSpeechRecognition() {
     isListening = false;
     micButton.textContent = "🎙";
   });
+}
+feedbackButton.addEventListener("click", () => {
+  // 別タブで Google フォームを開く
+  window.open(
+    "https://forms.gle/pjRzgGo4omZKviot5",
+    "_blank",
+    "noopener"
+  );
+  // ついでにステータス表示もしておくと親切
+  setStatus("ブラウザの別タブでフィードバック用フォームが開きます。");
+});
+// =========================
+// 📷 画像 → OCR
+// =========================
+imageInput.addEventListener("change", async () => {
+  const file = imageInput.files[0];
+  if (!file) return;
 
-  recognition.addEventListener("error", (event) => {
-    console.error("Speech recognition error:", event.error);
-    isListening = false;
-    micButton.textContent = "🎙";
-    setStatus("音声認識でエラーが発生しました。");
+  setStatus("📸 画像処理中…");
+
+  // File → Base64
+  const base64 = await fileToBase64(file);
+
+  // サムネイルをチャットに表示
+  appendImageMessage(base64);
+
+  try {
+    const resp = await fetch("/api/ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: base64 })
+    });
+
+    const data = await resp.json();
+
+    if (data.error) {
+      setStatus("OCR エラー：" + data.error);
+      return;
+    }
+
+    const ocrText = data.ocrText;
+
+    appendMessage("【OCR結果】\n" + ocrText, "bot");
+    inputEl.value = ocrText;
+
+    setStatus("OCR結果を入力欄に反映しました。");
+
+  } catch (err) {
+    console.error(err);
+    setStatus("OCR通信エラー");
+  }
+
+  imageInput.value = "";
+});
+
+// Base64変換
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 }
 
+// =========================
 // 紹介状コピー
+// =========================
 copyButton.addEventListener("click", async () => {
   if (!lastLetterText) return;
-  try {
-    await navigator.clipboard.writeText(lastLetterText);
-    setStatus("紹介状をクリップボードにコピーしました。カルテや紹介状システムに貼り付けてご利用ください。");
-  } catch (err) {
-    console.error(err);
-    setStatus("コピーに失敗しました。ブラウザの制限の可能性があります。");
-  }
+  await navigator.clipboard.writeText(lastLetterText);
+  setStatus("コピーしました。");
 });
 
-// 紹介状メール送信
+// =========================
+// メール送信
+// =========================
 emailButton.addEventListener("click", async () => {
   if (!lastLetterText) return;
-  setStatus("紹介状をメール送信中です…");
-  emailButton.disabled = true;
+
+  setStatus("メール送信中…");
+
   try {
-    const resp = await fetch("/api/send-email", {
+    await fetch("/api/send-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ letterText: lastLetterText }),
     });
-    if (!resp.ok) throw new Error("email error");
-    setStatus("紹介状のメール送信リクエストを送信しました。実際の送信状況はメールサーバー側でご確認ください。");
+    setStatus("送信依頼を送信しました。");
   } catch (err) {
-    console.error(err);
-    setStatus("メール送信エラーが発生しました。設定を確認してください。");
-  } finally {
-    emailButton.disabled = false;
+    setStatus("メール送信エラー");
   }
 });
 
+// =========================
 // フォーム送信
+// =========================
 formEl.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = inputEl.value.trim();
@@ -201,18 +284,17 @@ formEl.addEventListener("submit", (event) => {
   sendChat(text);
 });
 
-// 初期化：最初のボットメッセージ
+// =========================
+// 初期化
+// =========================
 function init() {
   setupSpeechRecognition();
-
-  // 最初の assistant メッセージを LLM に生成させる（紹介状に必要な情報の提示＋最初の質問）
-  messages = [];
-  setStatus("初期メッセージを生成中です…");
+  setStatus("初期メッセージ生成中…");
 
   fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }), // 最初は空
+    body: JSON.stringify({ messages: [] }),
   })
     .then((resp) => resp.json())
     .then((data) => {
@@ -220,14 +302,6 @@ function init() {
       messages.push({ role: "assistant", content: reply });
       appendMessage(reply, "bot");
       setStatus("");
-    })
-    .catch((err) => {
-      console.error(err);
-      appendMessage(
-        "チャットの初期化に失敗しました。ページを再読み込みするか、時間をおいて再度お試しください。",
-        "bot"
-      );
-      setStatus("初期化エラー");
     });
 }
 

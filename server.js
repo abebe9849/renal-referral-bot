@@ -30,7 +30,7 @@ try {
   console.error("医療用頻出単語_腎臓内科.md が読めません:", e.message);
 }
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 
 // ========== 1) 音声→テキストの誤字修正 API ==========
@@ -42,27 +42,21 @@ app.post("/api/clean-text", async (req, res) => {
     }
 
     const prompt = `
-あなたは日本語の医療文書専門の校正AIです。
-以下は音声認識から得られたテキストであり、医療用語や薬剤名、検査値の単位などが誤変換されている可能性があります。
+以下は日本語の医療情報（病歴・検査値など）です。音声認識由来の誤変換を可能な範囲で修正し、
+意味が変わらないように自然な日本語の文章に整形してください。
+修正には以下の医療単語の辞書を参考にしてください。
 
-【医療用頻出単語の辞書】
+[医療単語の辞書]
 ${medicalDictMd}
 
-■タスク
-- 上記の医療用語辞書を優先的に参照しながら、誤変換された医療用語や薬剤名を適切な表記に修正してください。
-- 検査値の数字や単位（mg/dL, mmol/L, g/gCr など）が明らかにおかしい場合は文脈から自然な形に整えてください。
-- ただし「推測して創作する」のではなく、元の意味を変えない範囲での修正にとどめてください。
-- 文の意味が変わらないようにしつつ、日本語として読みやすい医療文にしてください。
-- 出力は【修正後テキスト】のみを返し、説明やコメントは一切書かないでください。
-
-【入力テキスト】
+【入力】
 ${rawText}
 
-【修正後テキスト】
+【出力（修正後のテキストのみを返してください）】
 `.trim();
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.0-mini",
+      model: "gpt-4.1-mini",
       messages: [
         { role: "system", content: "あなたは日本語の医療文書の校正者です。" },
         { role: "user", content: prompt },
@@ -77,7 +71,6 @@ ${rawText}
     res.status(500).json({ error: "clean-text エラー" });
   }
 });
-
 
 // ========== 2) チャット本体 API（LLM＋ガイドライン参照） ==========
 app.post("/api/chat", async (req, res) => {
@@ -137,7 +130,7 @@ ${urgencyMd}
 `.trim();
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.0-mini",
+      model: "gpt-4.1-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,
@@ -152,7 +145,6 @@ ${urgencyMd}
     res.status(500).json({ error: "chat エラー" });
   }
 });
-// ========== 3) OCR（画像 → テキスト抽出） ==========
 app.post("/api/ocr", async (req, res) => {
   try {
     const { imageBase64 } = req.body || {};
@@ -160,50 +152,108 @@ app.post("/api/ocr", async (req, res) => {
       return res.status(400).json({ error: "imageBase64 がありません。" });
     }
 
-    // Vision OCR プロンプト
-    const visionPrompt = `
-あなたは医療文書を読み取るOCRシステムです。
-画像には以下が含まれる可能性があります：
-
-- 検診結果（健康診断結果、血液検査）
-- お薬手帳（薬剤名、処方量、処方日）
-- 検査の時系列データ
-- 血圧手帳、血糖記録
-- 病院のレシート型検査結果
-
-■タスク
-- 画像から読み取れる文字を忠実に抽出する
-- 表形式の検査値は、「項目: 値」の形で列挙
-- 誤認識が疑われる場合でも勝手に補完しない
-- 説明をつけず、抽出テキストのみ返す
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1",
+    // ① OCR でテキスト抽出
+    const vision = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
       messages: [
-        { role: "user",
+        {
+          role: "user",
           content: [
-            { type: "text", text: visionPrompt },
+            {
+              type: "text",
+              text: `
+あなたは日本語の OCR 専門家です。
+以下の画像から読み取れるテキスト（検査値・薬剤名・メモ）を可能な限り正確に抽出してください。
+出力は純粋なテキストのみ。余計な説明は不要。
+              `,
+            },
             {
               type: "image_url",
               image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`
+                url: `data:image/jpeg;base64,${imageBase64}`  // ←★ここを修正
               }
             }
           ]
         }
       ],
-      max_tokens: 4000,
-      temperature: 0.0,
+      temperature: 0
     });
 
-    const ocrText = completion.choices[0].message.content.trim();
+    const rawOcr = vision.choices[0]?.message?.content?.trim() || "";
 
-    const cleaned = await cleanTextWithLLM(ocrText); 
+    // ② OCR結果を校正
+    const prompt = `
+以下は OCR で抽出された日本語テキストです。
+誤字・OCR誤認識を自然な医療文章に整形してください。
+以下の医療単語の辞書も参考にしてください。
+
+[医療単語の辞書]
+${medicalDictMd}
+
+【入力】
+${rawOcr}
+
+【出力】
+`.trim();
+
+    const corrected = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [
+        { role: "system", content: "あなたは日本語の医療文書校正者です。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.1,
+    });
+
+    const cleaned = corrected.choices[0]?.message?.content?.trim() || rawOcr;
+
     res.json({ ocrText: cleaned });
+
+  } catch (err) {
+    console.error("OCR エラー:", err);
+    res.status(500).json({ error: "ocr エラー" });
+  }
+});
+
+
+// ========== 3) 紹介状メール送信 API ==========
+app.post("/api/send-email", async (req, res) => {
+  try {
+    console.log("SMTP_USER:", process.env.SMTP_USER);
+    console.log("SMTP_PASS length:", process.env.SMTP_PASS && process.env.SMTP_PASS.length);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "OCR エラー" });
+  }
+  try {
+    const { letterText } = req.body || {};
+    if (!letterText) {
+      return res.status(400).json({ error: "letterText がありません。" });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
+    const to = process.env.EMAIL_TO || "xxx@gmail.com"; // 固定アドレスに送りたい場合はここか .env で設定
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "腎臓内科紹介状（自動生成）",
+      text: letterText,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "メール送信エラー" });
   }
 });
 
