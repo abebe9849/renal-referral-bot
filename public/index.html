@@ -50,6 +50,12 @@
       border: 1px solid rgba(255,255,255,0.4);
       margin-top: 6px;
     }
+    .header-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
     .chat {
       flex: 1;
       padding: 10px;
@@ -92,6 +98,7 @@
       gap: 6px;
       align-items: center;
     }
+    
 
     /* ← テキストエリアに変更 */
     .input {
@@ -145,6 +152,19 @@
       border-top: 1px solid #e5e7eb;
       background: #f9fafb;
     }
+    .small-btn {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      margin-left: 6px;
+      border-radius: 5px;
+      background: #eee;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+
+    .small-btn:hover {
+      background: #e3e3e3;
+    }
 
     /* 隠しファイル入力 */
     #imageInput {
@@ -157,18 +177,27 @@
     <header class="app-header">
       <div class="app-header-title">腎臓内科 紹介状作成チャット</div>
       <div class="app-header-subtitle">
-        地域のクリニックの先生が腎機能低下の紹介可否・緊急度を判断するためのサポートツール
+        地域のクリニックの先生が腎機能低下の紹介可否・緊急度を判断するためのサポートツール，対話形式で紹介状を作成
       </div>
-      <div class="tag">音声入力 / 画像OCR 対応</div>
+
+      <div class="header-tools">
+        <div class="tag">音声入力 / 画像OCR 対応</div>
+        <button id="usageButton" class="button secondary" type="button">
+          使い方はこちらクリック
+        </button>
+      </div>
     </header>
 
     <div id="chat" class="chat"></div>
     <div id="status" class="status"></div>
 
     <div class="toolbar">
-      <button id="copyButton" class="button secondary" type="button" disabled>紹介状をコピー</button>
-      <button id="emailButton" class="button secondary" type="button" disabled>紹介状をメール送信</button>
+      <button id="copyButton" class="button secondary" type="button" disabled>コピー</button>
+      <button id="emailButton" class="button secondary" type="button" disabled>メール送信</button>
       <button id="feedbackButton" class="button secondary" type="button">改善のご意見</button>
+      <button id="resetCaseButton" type="button" class="secondary small-btn">
+    🧹 新しい症例
+  </button>
     </div>
 
     <form id="form" class="app-footer">

@@ -10,16 +10,28 @@ const OpenAI = require("openai");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// OpenAI クライアント
+// OpenAI クライアント（Responses API 用）
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ガイドラインの読み込み
+// ==============================
+// Markdown ガイドライン読込
+// ==============================
 const markdownDir = path.join(__dirname, "markdown");
-const infoMd = fs.readFileSync(path.join(markdownDir, "紹介状に必要な情報.md"), "utf8");
-const criteriaMd = fs.readFileSync(path.join(markdownDir, "紹介基準.md"), "utf8");
-const urgencyMd = fs.readFileSync(path.join(markdownDir, "紹介の緊急度.md"), "utf8");
+const infoMd = fs.readFileSync(
+  path.join(markdownDir, "紹介状に必要な情報.md"),
+  "utf8"
+);
+const criteriaMd = fs.readFileSync(
+  path.join(markdownDir, "紹介基準.md"),
+  "utf8"
+);
+const urgencyMd = fs.readFileSync(
+  path.join(markdownDir, "紹介の緊急度.md"),
+  "utf8"
+);
+
 let medicalDictMd = "";
 try {
   medicalDictMd = fs.readFileSync(
@@ -29,11 +41,14 @@ try {
 } catch (e) {
   console.error("医療用頻出単語_腎臓内科.md が読めません:", e.message);
 }
+
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 
-// ========== 1) 音声→テキストの誤字修正 API ==========
+/* =========================================================
+   1) 音声 → テキスト校正（単発なので previous_response_id なし）
+========================================================= */
 app.post("/api/clean-text", async (req, res) => {
   try {
     const { rawText } = req.body || {};
@@ -42,29 +57,31 @@ app.post("/api/clean-text", async (req, res) => {
     }
 
     const prompt = `
-以下は日本語の医療情報（病歴・検査値など）です。音声認識由来の誤変換を可能な範囲で修正し、
-意味が変わらないように自然な日本語の文章に整形してください。
-修正には以下の医療単語の辞書を参考にしてください。
+以下は日本語の医療情報（病歴・検査値など）です。
+音声認識の誤変換を可能な範囲で修正し、意味が変わらない自然な文章に整形してください。
+
+▼厳守ルール
+- 数値・単位は明らかな誤り以外は変更しない
+- 薬剤名・病名は、以下の辞書（医療用頻出語）に可能な限り合わせる
+- 不明語は削除せず残す
 
 [医療単語の辞書]
 ${medicalDictMd}
 
-【入力】
+【入力】  
 ${rawText}
 
-【出力（修正後のテキストのみを返してください）】
-`.trim();
+【出力】修正後のテキストのみ
+    `.trim();
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: "あなたは日本語の医療文書の校正者です。" },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.1,
+    const completion = await openai.responses.create({
+      model: "gpt-5-mini", // 必要なら "gpt-5-mini" などに変更
+      instructions: "あなたは日本語医療文書の校正専門家です。",
+      input: prompt, // ★ Responses API では input に文字列でOK
+      reasoning: { effort: "none" },
     });
 
-    const cleaned = completion.choices[0]?.message?.content?.trim() || rawText;
+    const cleaned = completion.output_text?.trim() || rawText;
     res.json({ cleanedText: cleaned });
   } catch (err) {
     console.error(err);
@@ -72,13 +89,15 @@ ${rawText}
   }
 });
 
-// ========== 2) チャット本体 API（LLM＋ガイドライン参照） ==========
+/* =========================================================
+   2) 対話式チャット（紹介状作成）
+   - フロントから:
+     { userText, previousResponseId, isInitial }
+   - previousResponseId を Responses API の previous_response_id に渡して会話継続
+========================================================= */
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages } = req.body || {};
-    if (!Array.isArray(messages)) {
-      return res.status(400).json({ error: "messages 配列が必要です。" });
-    }
+    const { userText, previousResponseId, isInitial } = req.body || {};
 
     const systemPrompt = `
 あなたは日本の腎臓内科専門医であり、「紹介状作成支援チャットボット」として振る舞います。
@@ -113,38 +132,60 @@ ${urgencyMd}
    - それまでの会話内容をもとに、腎臓内科宛の紹介状案を作成してください。
    - 形式：
      - 冒頭に『紹介状:』と書く
-     - 宛先（○○病院 腎臓内科 御中）
+     - 宛先（○○病院 腎臓内科  ○○先生 御侍史）
      - 患者基本情報（年齢・性別）
      - 紹介理由
      - 現病歴
      - 検査所見（時系列があれば要約）
      - 既往歴・内服
      - 考えられる鑑別・相談したいポイント
-     - 締めの挨拶
+     - 締めの挨拶（○○クリニック ○○ 拝）
    - 「紹介状:」以降は、紹介状本文のみを出力してください（説明文や会話は含めない）。
 
 4. ユーザーが「今回は見送る」などと判断した場合
    - 経過観察の際の注意点や、再紹介の目安を簡潔に助言してください。
 
 5. 会話全体を通じて、できるだけ簡潔で、忙しい臨床医に読みやすい日本語で対応してください。
-`.trim();
+    `.trim();
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.3,
+    // 初回アクセス用の入力
+    let inputText = userText;
+    if (isInitial) {
+      inputText = `
+これから腎臓内科への紹介が必要かどうかを一緒に検討します。
+まず、患者さんの年齢・性別と、腎機能異常に気づいたきっかけを教えてください。
+      `.trim();
+    }
+
+    if (!inputText && !previousResponseId) {
+      return res
+        .status(400)
+        .json({ error: "userText か previousResponseId のいずれかが必要です。" });
+    }
+
+    const resp = await openai.responses.create({
+      model: "gpt-5-mini",
+      instructions: systemPrompt,
+      input: inputText || undefined, // previous_response_id のみ指定で続きを聞くこともできるが、基本は常に input を渡す
+      ...(previousResponseId
+        ? { previous_response_id: previousResponseId }
+        : {}),
+      reasoning: { effort: "minimal" },
     });
 
-    const reply = completion.choices[0]?.message?.content ?? "";
-    res.json({ reply });
+    const reply = resp.output_text ?? "";
+    // フロントで次回呼び出し時に使うため、resp.id を返す
+    res.json({ reply, responseId: resp.id });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "chat エラー" });
   }
 });
+
+/* =========================================================
+   3) OCR（画像 → テキスト → 医療文書として整形）
+   - フロントから: { imageBase64 }
+========================================================= */
 app.post("/api/ocr", async (req, res) => {
   try {
     const { imageBase64 } = req.body || {};
@@ -152,36 +193,35 @@ app.post("/api/ocr", async (req, res) => {
       return res.status(400).json({ error: "imageBase64 がありません。" });
     }
 
-    // ① OCR でテキスト抽出
-    const vision = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
+    // ---- Step1: 画像から文字を読む（Responses API + input_image） ----
+    const visionResp = await openai.responses.create({
+      model: "gpt-5-mini",
+      input: [
         {
           role: "user",
           content: [
             {
-              type: "text",
+              type: "input_text",
               text: `
-あなたは日本語の OCR 専門家です。
-以下の画像から読み取れるテキスト（検査値・薬剤名・メモ）を可能な限り正確に抽出してください。
-出力は純粋なテキストのみ。余計な説明は不要。
-              `,
+あなたは日本語のOCR専門家です。
+以下の画像には、お薬手帳や検査結果などの医療情報が含まれています。
+読み取れる文字を可能な範囲で正確に抽出してください。
+出力は純粋なテキストのみ（説明やコメントは不要）とします。
+              `.trim(),
             },
             {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`  // ←★ここを修正
-              }
-            }
-          ]
-        }
+              type: "input_image",
+              image_url: `data:image/jpeg;base64,${imageBase64}`,
+            },
+          ],
+        },
       ],
-      temperature: 0
+      reasoning: { effort: "minimal" },
     });
 
-    const rawOcr = vision.choices[0]?.message?.content?.trim() || "";
+    const rawOcr = visionResp.output_text?.trim() || "";
 
-    // ② OCR結果を校正
+    // ---- Step2: OCR結果を医療文書として校正・整形 ----
     const prompt = `
 以下は OCR で抽出された日本語テキストです。
 誤字・OCR誤認識を自然な医療文章に整形してください。
@@ -194,70 +234,26 @@ ${medicalDictMd}
 ${rawOcr}
 
 【出力】
-`.trim();
+    `.trim();
 
-    const corrected = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
-        { role: "system", content: "あなたは日本語の医療文書校正者です。" },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.1,
+    const correctedResp = await openai.responses.create({
+      model: "gpt-5-mini",
+      instructions: "あなたは日本語の医療文書の校正者です。",
+      input: prompt,
+      reasoning: { effort: "minimal" },
     });
 
-    const cleaned = corrected.choices[0]?.message?.content?.trim() || rawOcr;
-
+    const cleaned = correctedResp.output_text?.trim() || rawOcr;
     res.json({ ocrText: cleaned });
-
   } catch (err) {
     console.error("OCR エラー:", err);
     res.status(500).json({ error: "ocr エラー" });
   }
 });
 
-
-// ========== 3) 紹介状メール送信 API ==========
-app.post("/api/send-email", async (req, res) => {
-  try {
-    console.log("SMTP_USER:", process.env.SMTP_USER);
-    console.log("SMTP_PASS length:", process.env.SMTP_PASS && process.env.SMTP_PASS.length);
-  } catch (err) {
-    console.error(err);
-  }
-  try {
-    const { letterText } = req.body || {};
-    if (!letterText) {
-      return res.status(400).json({ error: "letterText がありません。" });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
-    const to = process.env.EMAIL_TO || "xxx@gmail.com"; // 固定アドレスに送りたい場合はここか .env で設定
-
-    await transporter.sendMail({
-      from,
-      to,
-      subject: "腎臓内科紹介状（自動生成）",
-      text: letterText,
-    });
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "メール送信エラー" });
-  }
-});
-
-// サーバー起動
+// ==============================
+// サーバ起動
+// ==============================
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
