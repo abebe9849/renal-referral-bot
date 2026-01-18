@@ -10,6 +10,7 @@ const imgButton = document.getElementById("imgButton");
 const imageInput = document.getElementById("imageInput");
 const copyButton = document.getElementById("copyButton");
 const emailButton = document.getElementById("emailButton");
+const draftButton = document.getElementById("draftButton");
 const feedbackButton = document.getElementById("feedbackButton");
 const usageButton = document.getElementById("usageButton");
 const resetCaseButton = document.getElementById("resetCaseButton");
@@ -22,6 +23,121 @@ let messages = [];              // 画面表示用のログ
 let isSending = false;
 let lastLetterText = null;
 let previousResponseId = null;  // Responses API の previous_response_id 相当
+let totalInputTokens = 0;
+let totalOutputTokens = 0;
+// =========================
+// 送信前マスキング（要配慮個人情報）
+// =========================
+function maskSensitiveInfo(text) {
+  if (!text) return text;
+
+  const rules = [
+    {
+      pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
+      replace: "[メール]",
+    },
+    {
+      pattern: /[A-Z0-9._%+-]+(?:@|＠|\(at\)|\[at\]|\s?at\s?)[A-Z0-9.-]+\.[A-Z]{2,}/gi,
+      replace: "[メール]",
+    },
+    {
+      pattern: /\b0\d{1,4}[- ]?\d{1,4}[- ]?\d{3,4}\b/g,
+      replace: "[電話]",
+    },
+    {
+      pattern: /\+?\d{1,3}[- ]?\d{1,4}[- ]?\d{1,4}[- ]?\d{3,4}(?:\s?(?:内|ext\.?|x)\s?\d+)?/gi,
+      replace: "[電話]",
+    },
+    {
+      pattern: /\b\d{3}-?\d{4}\b/g,
+      replace: "[郵便番号]",
+    },
+    {
+      pattern: /〒?\s?\d{3}[-ー−]?\d{4}/g,
+      replace: "[郵便番号]",
+    },
+    {
+      pattern: /〒?\s?[０-９]{3}[ー−－]?[０-９]{4}/g,
+      replace: "[郵便番号]",
+    },
+    {
+      pattern: /\b\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b/g,
+      replace: "[生年月日]",
+    },
+    {
+      pattern: /\b\d{2}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b/g,
+      replace: "[生年月日]",
+    },
+    {
+      pattern: /\b\d{4}年\d{1,2}月\d{1,2}日\b/g,
+      replace: "[生年月日]",
+    },
+    {
+      pattern: /\b(明治|大正|昭和|平成|令和)\d{1,2}年\d{1,2}月\d{1,2}日\b/g,
+      replace: "[生年月日]",
+    },
+    {
+      pattern: /(氏名|名前|患者名)\s*[:：]\s*[^\s]+/g,
+      replace: "$1: [氏名]",
+    },
+    {
+      pattern: /(氏名|名前|患者名)\s*[：:]?\s*[^\n]+/g,
+      replace: "$1: [氏名]",
+    },
+    {
+      pattern: /^(?:氏名)?\s*[一-龯々〆ヵヶ]{2,4}\s*[一-龯々〆ヵヶ]{1,4}\s*$/gm,
+      replace: "[氏名]",
+    },
+    {
+      pattern: /^(?:氏名)?\s*[A-Z][A-Z'\-]+(?:\s+[A-Z][A-Z'\-]+)+\s*$/gim,
+      replace: "[氏名]",
+    },
+    {
+      pattern: /\b[一-龯々〆ヵヶ]{1,4}(?:さん|様|氏|君)\b/g,
+      replace: "[氏名]",
+    },
+    {
+      pattern: /\b[一-龯々〆ヵヶ]{1,4}(?:さん|様|氏|君)?\s*\d{1,3}\s*(?:歳|さい)\b/g,
+      replace: "[氏名] [年齢]",
+    },
+    {
+      pattern:
+        /(?<![一-龯々〆ヵヶぁ-んァ-ヶー])[一-龯々〆ヵヶ]{2,4}\s*[一-龯々〆ヵヶ]{1,4}(?![一-龯々〆ヵヶぁ-んァ-ヶー])/g,
+      replace: "[氏名]",
+    },
+    {
+      pattern:
+        /(?<![A-Z])[A-Z][A-Z'\-]+(?:\s+[A-Z][A-Z'\-]+)+(?![A-Z])/g,
+      replace: "[氏名]",
+    },
+    {
+      pattern: /(住所|所在地)\s*[:：]\s*[^\n]+/g,
+      replace: "$1: [住所]",
+    },
+    {
+      pattern: /(住所|所在地)\s*[：:]?\s*[^\n]+/g,
+      replace: "$1: [住所]",
+    },
+    {
+      pattern: /^(?:〒?\s?\d{3}[-ー−]?\d{4}\s*)?(?:北海道|東京都|大阪府|京都府|.{2,3}県).+$/gm,
+      replace: "[住所]",
+    },
+    {
+      pattern: /(ID|患者ID|カルテ番号|診察券番号)\s*[:：]?\s*\d+/gi,
+      replace: "$1: [ID]",
+    },
+    {
+      pattern: /(ID|患者ID|患者番号|カルテ番号|カルテNo|診察券番号|診察券No)\s*[:：]?\s*[A-Z0-9-]+/gi,
+      replace: "$1: [ID]",
+    },
+  ];
+
+  let masked = text;
+  rules.forEach(({ pattern, replace }) => {
+    masked = masked.replace(pattern, replace);
+  });
+  return masked;
+}
 
 // =========================
 // 音声認識
@@ -89,6 +205,7 @@ async function sendChat(userText) {
 
   isSending = true;
   const sendingText = userText; // 念のため退避
+  const maskedText = maskSensitiveInfo(sendingText);
   inputEl.value = "";
   inputEl.disabled = true;
   sendButton.disabled = true;
@@ -96,15 +213,15 @@ async function sendChat(userText) {
   setStatus("LLMと通信中です…");
 
   // 画面表示用
-  messages.push({ role: "user", content: sendingText });
-  appendMessage(sendingText, "user");
+  messages.push({ role: "user", content: maskedText });
+  appendMessage(maskedText, "user");
 
   try {
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userText: sendingText,
+        userText: maskedText,
         previousResponseId, // 前回のレスポンスIDを渡す
       }),
     });
@@ -129,10 +246,20 @@ async function sendChat(userText) {
       const idx = reply.indexOf(marker);
       // その後ろ（紹介状: を含めない）から末尾までを紹介状本文として扱う
       const letterBody = reply.slice(idx + marker.length).trimStart();
+      const inputCostUSD  = totalInputTokens  * 0.00000025;
+      const outputCostUSD = totalOutputTokens * 0.000002;
+      const totalUSD = inputCostUSD + outputCostUSD;
 
       lastLetterText = letterBody;
       copyButton.disabled = false;
       emailButton.disabled = false;
+      appendMessage(
+      `💰 この症例にかかった推定コスト\n` +
+      `Input tokens: ${totalInputTokens}\n` +
+      `Output tokens: ${totalOutputTokens}\n` +
+      `USD: $${totalUSD.toFixed(6)}\n`,
+      "bot"
+    );
       setStatus(
         "紹介状案が生成されました。コピーまたはメール送信できます。"
       );
@@ -341,6 +468,64 @@ copyButton.addEventListener("click", async () => {
   if (!lastLetterText) return;
   await navigator.clipboard.writeText(lastLetterText);
   setStatus("紹介状をクリップボードにコピーしました。");
+});
+
+// =========================
+/* 紹介状作成（現時点の会話から下書き） */
+// =========================
+draftButton.addEventListener("click", async () => {
+  if (isSending) return;
+  if (!messages.length) {
+    setStatus("会話内容がありません。");
+    return;
+  }
+
+  isSending = true;
+  draftButton.disabled = true;
+  setStatus("紹介状案を作成中…");
+
+  const conversation = messages
+    .filter((m) => typeof m.content === "string")
+    .filter((m) => !m.content.startsWith("💰"))
+    .map((m) => `${m.role === "user" ? "ユーザー" : "ボット"}: ${m.content}`)
+    .join("\n");
+
+  try {
+    const resp = await fetch("/api/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation }),
+    });
+
+    if (!resp.ok) throw new Error("draft API error");
+
+    const data = await resp.json();
+    const reply = data.reply || "";
+
+    messages.push({ role: "assistant", content: reply });
+    appendMessage(reply, "bot");
+
+    const marker = "紹介状:";
+    if (reply.includes(marker)) {
+      const idx = reply.indexOf(marker);
+      const letterBody = reply.slice(idx + marker.length).trimStart();
+      lastLetterText = letterBody;
+      copyButton.disabled = false;
+      emailButton.disabled = false;
+    }
+
+    setStatus("紹介状案を作成しました。");
+  } catch (err) {
+    console.error(err);
+    appendMessage(
+      "紹介状案の作成に失敗しました。もう一度お試しください。",
+      "bot"
+    );
+    setStatus("作成エラー");
+  } finally {
+    isSending = false;
+    draftButton.disabled = false;
+  }
 });
 
 // =========================
