@@ -38,6 +38,13 @@ const urgencyMd = fs.readFileSync(
   path.join(markdownDir, "紹介の緊急度.md"),
   "utf8"
 );
+const diseaseListPath = path.join(markdownDir, "病名リスト.md");
+let diseaseListMd = "";
+try {
+  diseaseListMd = fs.readFileSync(diseaseListPath, "utf8");
+} catch (e) {
+  console.error("病名リスト.md が読めません:", e.message);
+}
 
 let medicalDictMd = "";
 try {
@@ -52,6 +59,23 @@ try {
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
+
+// ==============================
+// 病名リスト取得
+// ==============================
+app.get("/api/disease-list", (req, res) => {
+  if (!diseaseListMd) {
+    return res.json({ terms: [] });
+  }
+  const terms = diseaseListMd
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.replace(/^\-+\s*/, ""))
+    .filter((line) => line);
+
+  return res.json({ terms });
+});
 
 /* =========================================================
    1) 音声 → テキスト校正（単発なので previous_response_id なし）

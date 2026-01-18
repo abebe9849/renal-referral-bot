@@ -25,11 +25,16 @@ let lastLetterText = null;
 let previousResponseId = null;  // Responses API の previous_response_id 相当
 let totalInputTokens = 0;
 let totalOutputTokens = 0;
+let diseaseTerms = [];
+let diseaseListLoaded = false;
 // =========================
 // 送信前マスキング（要配慮個人情報）
 // =========================
 function maskSensitiveInfo(text) {
   if (!text) return text;
+
+  const protectedInfo = protectDiseaseTerms(text);
+  let masked = protectedInfo.text;
 
   const rules = [
     {
@@ -121,7 +126,7 @@ function maskSensitiveInfo(text) {
     },
     {
       pattern:
-        /(?<![一-龯々〆ヵヶぁ-んァ-ヶー])[一-龯々〆ヵヶ]{2,4}\s*[一-龯々〆ヵヶ]{1,4}(?![一-龯々〆ヵヶぁ-んァ-ヶー])/g,
+        /(?<![一-龯々〆ヵヶぁ-んァ-ヶー])[一-龯々〆ヵヶ]{2,4}(?:\s+|・)?[一-龯々〆ヵヶ]{2,4}(?![一-龯々〆ヵヶぁ-んァ-ヶー])/g,
       replace: "[氏名]",
     },
     {
@@ -157,11 +162,65 @@ function maskSensitiveInfo(text) {
     },
   ];
 
-  let masked = text;
   rules.forEach(({ pattern, replace }) => {
     masked = masked.replace(pattern, replace);
   });
-  return masked;
+
+  return restoreDiseaseTerms(masked, protectedInfo.map);
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function protectDiseaseTerms(text) {
+  if (!diseaseListLoaded || !diseaseTerms.length) {
+    return { text, map: null };
+  }
+
+  let protectedText = text;
+  const map = new Map();
+  let idx = 0;
+
+  diseaseTerms.forEach((term) => {
+    const token = `__KEEP_DX_${String(idx).padStart(4, "0")}__`;
+    const re = new RegExp(escapeRegExp(term), "g");
+    if (re.test(protectedText)) {
+      protectedText = protectedText.replace(re, token);
+      map.set(token, term);
+      idx += 1;
+    }
+  });
+
+  return { text: protectedText, map };
+}
+
+function restoreDiseaseTerms(text, map) {
+  if (!map || map.size === 0) return text;
+
+  let restored = text;
+  for (const [token, term] of map.entries()) {
+    restored = restored.split(token).join(term);
+  }
+  return restored;
+}
+
+async function loadDiseaseList() {
+  try {
+    const resp = await fetch("/api/disease-list");
+    if (!resp.ok) throw new Error(`status ${resp.status}`);
+    const data = await resp.json();
+    diseaseTerms = Array.isArray(data.terms) ? data.terms : [];
+    diseaseTerms = diseaseTerms
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    diseaseListLoaded = true;
+  } catch (err) {
+    console.warn("病名リストの読込に失敗:", err.message || err);
+    diseaseTerms = [];
+    diseaseListLoaded = false;
+  }
 }
 
 // =========================
@@ -589,6 +648,7 @@ formEl.addEventListener("submit", (event) => {
 // =========================
 function init() {
   setupSpeechRecognition();
+  loadDiseaseList();
   setStatus("初期メッセージ生成中…");
 
   fetch("/api/chat", {
