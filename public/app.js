@@ -41,11 +41,21 @@ function maskSensitiveInfo(text) {
       replace: "[メール]",
     },
     {
+      pattern:
+        /[A-Z0-9._%+-]+(?:\s*(?:@|＠|\(at\)|\[at\]|\s+at\s+)\s*)[A-Z0-9.-]+(?:\s*(?:\.|．|。)\s*[A-Z]{2,})+/gi,
+      replace: "[メール]",
+    },
+    {
       pattern: /\b0\d{1,4}[- ]?\d{1,4}[- ]?\d{3,4}\b/g,
       replace: "[電話]",
     },
     {
       pattern: /\+?\d{1,3}[- ]?\d{1,4}[- ]?\d{1,4}[- ]?\d{3,4}(?:\s?(?:内|ext\.?|x)\s?\d+)?/gi,
+      replace: "[電話]",
+    },
+    {
+      pattern:
+        /(?:電話|TEL|携帯|連絡先|FAX)\s*[:：]?\s*\+?[0-9０-９]{1,3}[-－ー ]?[0-9０-９]{1,4}[-－ー ]?[0-9０-９]{1,4}[-－ー ]?[0-9０-９]{3,4}(?:\s*(?:内|ext\.?|x)\s*[0-9０-９]+)?/gi,
       replace: "[電話]",
     },
     {
@@ -77,6 +87,11 @@ function maskSensitiveInfo(text) {
       replace: "[生年月日]",
     },
     {
+      pattern:
+        /(生年月日)\s*[:：]?\s*(?:\d{4}|[０-９]{4}|(明治|大正|昭和|平成|令和)\d{1,2})[\/\-\.年]?\d{1,2}[\/\-\.月]?\d{1,2}日?/g,
+      replace: "$1: [生年月日]",
+    },
+    {
       pattern: /(氏名|名前|患者名)\s*[:：]\s*[^\s]+/g,
       replace: "$1: [氏名]",
     },
@@ -97,6 +112,10 @@ function maskSensitiveInfo(text) {
       replace: "[氏名]",
     },
     {
+      pattern: /\b[ぁ-んァ-ヶー]{2,8}(?:さん|様|氏|君)\b/g,
+      replace: "[氏名]",
+    },
+    {
       pattern: /\b[一-龯々〆ヵヶ]{1,4}(?:さん|様|氏|君)?\s*\d{1,3}\s*(?:歳|さい)\b/g,
       replace: "[氏名] [年齢]",
     },
@@ -108,6 +127,10 @@ function maskSensitiveInfo(text) {
     {
       pattern:
         /(?<![A-Z])[A-Z][A-Z'\-]+(?:\s+[A-Z][A-Z'\-]+)+(?![A-Z])/g,
+      replace: "[氏名]",
+    },
+    {
+      pattern: /\b[A-Z][A-Z'\-]+,\s*[A-Z][A-Z'\-]+\b/gi,
       replace: "[氏名]",
     },
     {
@@ -123,11 +146,13 @@ function maskSensitiveInfo(text) {
       replace: "[住所]",
     },
     {
-      pattern: /(ID|患者ID|カルテ番号|診察券番号)\s*[:：]?\s*\d+/gi,
-      replace: "$1: [ID]",
+      pattern:
+        /^(?:〒?\s?[0-9０-９]{3}[-ー−]?[0-9０-９]{4}\s*)?.*(?:市|区|町|村).*(?:丁目|番地|番|号).+$/gm,
+      replace: "[住所]",
     },
     {
-      pattern: /(ID|患者ID|患者番号|カルテ番号|カルテNo|診察券番号|診察券No)\s*[:：]?\s*[A-Z0-9-]+/gi,
+      pattern:
+        /(ID|患者ID|患者番号|カルテ番号|カルテNo|診察券番号|診察券No)\s*[:：]?\s*[A-Z0-9０-９\-ー－_]+/gi,
       replace: "$1: [ID]",
     },
   ];
