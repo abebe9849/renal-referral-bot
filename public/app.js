@@ -481,8 +481,7 @@ feedbackButton.addEventListener("click", () => {
 });
 if (usageButton) {
   usageButton.addEventListener("click", () => {
-    // ★ここに実際のYouTube動画URLを入れてください
-    const url = "https://www.youtube.com/watch?v=oiWcKRreQ28";
+    const url = "https://youtu.be/DI--3lcywAU";
 
     window.open(url, "_blank", "noopener");
     setStatus("使い方動画を別タブで開きました。");
