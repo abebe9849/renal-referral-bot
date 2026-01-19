@@ -501,7 +501,7 @@ imageInput.addEventListener("change", async () => {
   // File → Base64
   const base64 = await fileToBase64(file);
 
-  await runOcrWithBase64(base64);
+  await runOcrWithBase64(base64, file.type || "image/jpeg");
 
   imageInput.value = "";
 });
@@ -519,7 +519,7 @@ function fileToBase64(file) {
   });
 }
 
-async function runOcrWithBase64(base64) {
+async function runOcrWithBase64(base64, mimeType) {
   // サムネイルをチャットに表示
   appendImageMessage(base64);
 
@@ -527,7 +527,7 @@ async function runOcrWithBase64(base64) {
     const resp = await fetch("/api/ocr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageBase64: base64 }),
+      body: JSON.stringify({ imageBase64: base64, mimeType }),
     });
 
     const data = await resp.json();
@@ -567,7 +567,7 @@ inputEl.addEventListener("paste", async (event) => {
 
   setStatus("📋 画像貼り付けを処理中…");
   const base64 = await fileToBase64(file);
-  await runOcrWithBase64(base64);
+  await runOcrWithBase64(base64, file.type || "image/jpeg");
 });
 
 // =========================

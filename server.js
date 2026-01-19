@@ -286,13 +286,16 @@ ${conversation}
 ========================================================= */
 app.post("/api/ocr", async (req, res) => {
   try {
-    const { imageBase64 } = req.body || {};
+    const { imageBase64, mimeType } = req.body || {};
     if (!imageBase64) {
       return res.status(400).json({ error: "imageBase64 がありません。" });
     }
+    const safeMimeType =
+      typeof mimeType === "string" && mimeType.startsWith("image/")
+        ? mimeType
+        : "image/jpeg";
 
     // ---- Step1: Gemini 3.0 で OCR（画像 → 生テキスト） ----
-    // ここではスマホ撮影などを想定して JPEG 固定
     const parts = [
       {
         text: `
@@ -304,7 +307,7 @@ app.post("/api/ocr", async (req, res) => {
       },
       {
         inlineData: {
-          mimeType: "image/jpeg",
+          mimeType: safeMimeType,
           data: imageBase64, // フロントから来た base64 文字列
         },
       },
@@ -351,10 +354,14 @@ ${rawOcr}
 
 app.post("/api/oc_r", async (req, res) => {
   try {
-    const { imageBase64 } = req.body || {};
+    const { imageBase64, mimeType } = req.body || {};
     if (!imageBase64) {
       return res.status(400).json({ error: "imageBase64 がありません。" });
     }
+    const safeMimeType =
+      typeof mimeType === "string" && mimeType.startsWith("image/")
+        ? mimeType
+        : "image/jpeg";
 
     // ---- Step1: 画像から文字を読む（Responses API + input_image） ----
     const visionResp = await openai.responses.create({
@@ -374,7 +381,7 @@ app.post("/api/oc_r", async (req, res) => {
             },
             {
               type: "input_image",
-              image_url: `data:image/jpeg;base64,${imageBase64}`,
+              image_url: `data:${safeMimeType};base64,${imageBase64}`,
             },
           ],
         },
