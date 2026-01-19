@@ -501,6 +501,25 @@ imageInput.addEventListener("change", async () => {
   // File → Base64
   const base64 = await fileToBase64(file);
 
+  await runOcrWithBase64(base64);
+
+  imageInput.value = "";
+});
+
+// Base64変換
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function runOcrWithBase64(base64) {
   // サムネイルをチャットに表示
   appendImageMessage(base64);
 
@@ -528,22 +547,28 @@ imageInput.addEventListener("change", async () => {
     console.error(err);
     setStatus("OCR通信エラー");
   }
-
-  imageInput.value = "";
-});
-
-// Base64変換
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result.split(",")[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
+
+// =========================
+/* クリップボード画像貼り付け */
+// =========================
+inputEl.addEventListener("paste", async (event) => {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+
+  const imageItem = Array.from(items).find(
+    (item) => item.kind === "file" && item.type.startsWith("image/")
+  );
+  if (!imageItem) return;
+
+  event.preventDefault();
+  const file = imageItem.getAsFile();
+  if (!file) return;
+
+  setStatus("📋 画像貼り付けを処理中…");
+  const base64 = await fileToBase64(file);
+  await runOcrWithBase64(base64);
+});
 
 // =========================
 /* 紹介状コピー */
