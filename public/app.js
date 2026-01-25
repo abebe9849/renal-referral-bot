@@ -314,6 +314,13 @@ async function sendChat(userText) {
 
     const data = await resp.json();
     const reply = data.reply || "";
+    const usage = data.usage || {};
+    if (Number.isFinite(usage.input_tokens)) {
+      totalInputTokens += usage.input_tokens;
+    }
+    if (Number.isFinite(usage.output_tokens)) {
+      totalOutputTokens += usage.output_tokens;
+    }
 
     // 次回用の previousResponseId を更新
     if (data.responseId) {
